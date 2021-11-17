@@ -52,8 +52,10 @@ if __name__ == '__main__':
                         default=os.environ.get('SCYLLA_VERSION', None))
     arguments = parser.parse_args()
 
-    versions = arguments.versions or extract_two_latest_repo_tags(repo_directory=arguments.python_driver_git)
-    if not isinstance(arguments.versions, list):
+    logging.info("----------'{}'----------".format(arguments.versions))
+    if "dynamic" in arguments.versions:
+        versions = extract_two_latest_repo_tags(repo_directory=arguments.python_driver_git)
+    elif not isinstance(arguments.versions, list):
         versions = arguments.versions.split(',')
     if not isinstance(arguments.protocols, list):
         protocols = arguments.protocols.split(',')
