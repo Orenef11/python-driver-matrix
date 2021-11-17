@@ -1,6 +1,8 @@
 import os
 import logging
 import argparse
+import subprocess
+from typing import List
 
 import run
 
@@ -24,8 +26,15 @@ def main(python_driver_git, scylla_install_dir, driver_type, tests, versions, pr
     quit(status)
 
 
+def extract_two_latest_repo_tags(repo_directory: str, latest_tags_size: int = 2) -> List[str]:
+    commands = f"""
+    cd {repo_directory}
+    git tag --sort=-creatordate | head -n {latest_tags_size}
+    """
+    return subprocess.check_output(commands, shell=True).decode().splitlines()
+
+
 if __name__ == '__main__':
-    versions = ['3.0.0', '3.2.0', '3.4.0', '3.5.0', '3.8.0', '3.9.0']
     protocols = ['3', '4']
     parser = argparse.ArgumentParser()
     parser.add_argument('python_driver_git', help='folder with git repository of python-driver')
@@ -34,16 +43,20 @@ if __name__ == '__main__':
                         nargs='?', default='')
     parser.add_argument('--driver-type', help='Type of python-driver ("scylla", "cassandra" or "datastax")',
                         dest='driver_type')
-    parser.add_argument('--versions', default=versions,
-                        help='python-driver versions to test, default={}'.format(','.join(versions)))
+    parser.add_argument('--versions', default="", help='python-driver versions to test')
     parser.add_argument('--tests', default='tests.integration.standard',
                         help='tests to pass to nosetests tool, default=tests.integration.standard')
     parser.add_argument('--protocols', default=protocols,
                         help='cqlsh native protocol, default={}'.format(','.join(protocols)))
-    parser.add_argument('--scylla-version', help="relocatable scylla version to use", default=os.environ.get('SCYLLA_VERSION', None))
+    parser.add_argument('--scylla-version', help="relocatable scylla version to use",
+                        default=os.environ.get('SCYLLA_VERSION', None))
     arguments = parser.parse_args()
+
+    versions = arguments.versions or extract_two_latest_repo_tags(repo_directory=arguments.python_driver_git)
     if not isinstance(arguments.versions, list):
         versions = arguments.versions.split(',')
     if not isinstance(arguments.protocols, list):
         protocols = arguments.protocols.split(',')
-    main(arguments.python_driver_git, arguments.scylla_install_dir, arguments.driver_type, arguments.tests, versions, protocols, arguments.scylla_version)
+    logging.info('The following python driver versions will test: '.format(', '.join(versions)))
+    main(arguments.python_driver_git, arguments.scylla_install_dir, arguments.driver_type, arguments.tests, versions,
+         protocols, arguments.scylla_version)
