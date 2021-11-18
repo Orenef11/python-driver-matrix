@@ -158,10 +158,7 @@ class Run:
     def _checkout_branch(self):
         try:
             subprocess.check_call('git checkout .', shell=True)
-            if self._python_driver_type == 'scylla':
-                subprocess.check_call('git checkout {}-scylla'.format(self._tag), shell=True)
-            else:
-                subprocess.check_call('git checkout {}'.format(self._tag), shell=True)
+            subprocess.check_call('git checkout {}'.format(self._tag), shell=True)
             return True
         except Exception as exc:
             logging.error("Failed to branch for version {}, with: {}".format(self._tag, str(exc)))
