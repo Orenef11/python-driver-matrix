@@ -14,7 +14,8 @@ def main(python_driver_git, scylla_install_dir, driver_type, tests, versions, pr
     for version in versions:
         for protocol in protocols:
             logging.info('=== PYTHON DRIVER VERSION {}, PROTOCOL v{} ==='.format(version, protocol))
-            results.append(run.Run(python_driver_git, driver_type, scylla_install_dir, version, protocol, tests, scylla_version=scylla_version))
+            results.append(run.Run(python_driver_git, driver_type, scylla_install_dir, version, protocol, tests,
+                                   scylla_version=scylla_version))
 
     logging.info('=== PYTHON DRIVER MATRIX RESULTS ===')
     status = 0

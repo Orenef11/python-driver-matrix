@@ -1,18 +1,20 @@
 import logging
 import os
-import shutil
+import re
 import subprocess
+
 import yaml
 import processjunit
 import tempfile
-from packaging.version import Version
+from packaging.version import Version, InvalidVersion
 
 
 class Run:
 
     def __init__(self, python_driver_git, python_driver_type, scylla_install_dir, tag, protocol, tests,
                  scylla_version=None):
-        self._tag = tag
+        # In case the tag contains a format version like  '3.24.7.1'
+        self._tag = tag.split("-", maxsplit=1)[0]
         self._python_driver_git = python_driver_git
         self._python_driver_type = python_driver_type
         self._scylla_version = scylla_version
@@ -37,37 +39,30 @@ class Run:
 
     @property
     def version_folder(self):
-        if self._version_folder is not None:
-            return self._version_folder
-        self._version_folder = self.__version_folder(self._python_driver_type, self._tag)
+        if self._version_folder is None:
+            self._version_folder = self.__version_folder(self._python_driver_type, self._tag)
+        logging.info("Taking patch and ignore files from directory '{}'".format(self._version_folder))
         return self._version_folder
 
     @staticmethod
     def __version_folder(python_driver_type, target_tag):
+        version_pattern = re.compile(r"(\d+.)+\d+$")
         target_version_folder = os.path.join(os.path.dirname(__file__), 'versions', python_driver_type)
         try:
             target_version = Version(target_tag)
-        except:
+        except InvalidVersion:
             target_dir = os.path.join(target_version_folder, target_tag)
             if os.path.exists(target_dir):
                 return target_dir
             return os.path.join(target_version_folder, 'master')
 
-        tags_defined = []
-        for tag in os.listdir(target_version_folder):
-            try:
-                tag = Version(tag)
-            except:
-                continue
-            if tag:
-                tags_defined.append(tag)
-        if not tags_defined:
-            return None
-        last_valid_defined_tag = Version('0.0.0')
-        for tag in sorted(tags_defined):
+        tags_defined = sorted(
+            (Version(tag) for tag in os.listdir(target_version_folder) if version_pattern.match(tag)),
+            reverse=True)
+        for tag in tags_defined:
             if tag <= target_version:
-                last_valid_defined_tag = tag
-        return os.path.join(target_version_folder, str(last_valid_defined_tag))
+                return os.path.join(target_version_folder, str(tag))
+        return None
 
     def _setup_out_dir(self):
         here = os.path.dirname(__file__)
@@ -118,11 +113,7 @@ class Run:
 
     def _apply_patch(self):
         try:
-            patch_file = os.path.join(self.version_folder, 'patch')
-            if not os.path.exists(patch_file):
-                logging.info('Cannot find patch for version {}'.format(self._tag))
-                return True
-            command = "patch -p1 -i {}".format(patch_file)
+            command = "patch -p1 -i {}".format(os.path.join(self.version_folder, 'patch'))
             subprocess.check_call(command, shell=True)
             return True
         except Exception as exc:
@@ -158,7 +149,10 @@ class Run:
     def _checkout_branch(self):
         try:
             subprocess.check_call('git checkout .', shell=True)
-            subprocess.check_call('git checkout {}'.format(self._tag), shell=True)
+            if self._python_driver_type == 'scylla':
+                subprocess.check_call('git checkout {}-scylla'.format(self._tag), shell=True)
+            else:
+                subprocess.check_call('git checkout {}'.format(self._tag), shell=True)
             return True
         except Exception as exc:
             logging.error("Failed to branch for version {}, with: {}".format(self._tag, str(exc)))
