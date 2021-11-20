@@ -59,13 +59,23 @@ def get_arguments():
 if __name__ == '__main__':
     arguments = get_arguments()
 
+    logging.info("***** python-driver repo '%s' ****", arguments.python_driver_git)
+    try:
+        versions = extract_two_latest_repo_tags(
+            repo_directory=arguments.python_driver_git,
+            python_driver_type="scylla" if arguments.driver_type == "scylla" else ""
+        )
+        logging.info("***** Python dynamic versions '%s'", ",".join(versions))
+    except:
+        pass
+
     if "dynamic" in arguments.versions:
         versions = extract_two_latest_repo_tags(
             repo_directory=arguments.python_driver_git,
             python_driver_type="scylla" if arguments.driver_type == "scylla" else ""
         )
     else:
-        versions = arguments.versions.split(",") if isinstance(str, arguments.versions) else arguments.versions
+        versions = arguments.versions.split(",") if isinstance(arguments.versions, str) else arguments.versions
 
     protocols = arguments.protocols.split(',') if isinstance(arguments.protocols, str) else arguments.protocols
     logging.info('The following python driver versions will test: '.format(', '.join(versions)))
