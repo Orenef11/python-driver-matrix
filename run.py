@@ -2,7 +2,6 @@ import logging
 import os
 import re
 import subprocess
-from functools import cached_property
 from typing import Set
 
 import yaml
@@ -28,7 +27,7 @@ class Run:
         self._xunit_file = self._get_xunit_file(self._setup_out_dir())
         self._run()
 
-    @cached_property
+    @property
     def summary(self):
         return self._junit.summary
 
@@ -36,10 +35,10 @@ class Run:
         details = dict(version=self._tag, protocol=self._protocol, type=self._python_driver_type)
         details.update(self._junit.summary)
         return '({type}){version}: v{protocol}: testcases: {testcase},' \
-            ' failures: {failure}, errors: {error}, skipped: {skipped},' \
-            ' ignored_in_analysis: {ignored_in_analysis}'.format(**details)
+               ' failures: {failure}, errors: {error}, skipped: {skipped},' \
+               ' ignored_in_analysis: {ignored_in_analysis}'.format(**details)
 
-    @cached_property
+    @property
     def version_folder(self) -> str:
         if self._version_folder is None:
             self._version_folder = self.__version_folder(self._python_driver_type, self._tag)
@@ -81,7 +80,7 @@ class Run:
             os.unlink(file_path)
         return file_path
 
-    @cached_property
+    @property
     def ignore_file(self):
         return os.path.join(self.version_folder, 'ignore.yaml')
 
@@ -92,17 +91,17 @@ class Run:
 
         with open(self.ignore_file) as file:
             content = yaml.safe_load(file)
-        ignore_tests = set(content.get("general", []))
-        ignore_tests.update(content.get(self._protocol, []))
+        ignore_tests = set(content.get("general", []) or [])
+        ignore_tests.update(content.get(self._protocol, []) or [])
         if not ignore_tests:
             logging.info("The 'ignore.yaml' for version tag '%s' doesn't contains '%d' element or it's empty"
-                         "".format(self._tag, self._protocol))
+                         "" % (self._tag, self._protocol))
         return ignore_tests
 
     def _environment(self):
         result = {}
         result.update(os.environ)
-        result['PROTOCOL_VERSION'] = self._protocol
+        result['PROTOCOL_VERSION'] = str(self._protocol)
         if self._scylla_version:
             result['SCYLLA_VERSION'] = self._scylla_version
         else:
@@ -119,6 +118,7 @@ class Run:
                     logging.error("Failed to apply patch '{}' to version '{}', with: '{}'".format(
                         file_path, self._tag, str(exc)))
                     return False
+        return True
 
     def _get_venv_path(self):
         if self._venv_path is not None:
@@ -138,9 +138,10 @@ class Run:
             for requirement_file in ['./requirements.txt', './test-requirements.txt']:
                 if not os.path.exists(requirement_file):
                     continue
-                subprocess.call(f"{self._activate_venv_cmd()} ; pip install --user --force-reinstall -r {requirement_file}",
-                                shell=True,
-                                env=self._environment())
+                subprocess.call(
+                    f"{self._activate_venv_cmd()} ; pip install --user --force-reinstall -r {requirement_file}",
+                    shell=True,
+                    env=self._environment())
             return True
         except Exception as exc:
             logging.error("Failed to install python requirements for version {}, with: {}".format(self._tag, str(exc)))
@@ -169,8 +170,12 @@ class Run:
         if not self._install_python_requirements():
             self._publish_fake_result()
             return
-        exclude_str = " ".join(f'--exclude-test {test_name}' for test_name in self._ignore_tests())
-        cmd = 'nosetests --with-xunit --xunit-file {} -s {} {}'.format(self._xunit_file, self._tests, exclude_str)
+        test_excludes = self._ignore_tests()
+        if test_excludes:
+            logging.info("The following tests will skips:\n%s", "\n".join(test_excludes))
+        cmd = 'nosetests --with-xunit --xunit-file {} -s {} {}'.format(
+            self._xunit_file, self._tests, " ")
+        # " ".join(f'--exclude-test {test_name}' for test_name in test_excludes)
         logging.info(cmd)
         subprocess.call(cmd.split(), env=self._environment())
         self._junit = self._process_output()
