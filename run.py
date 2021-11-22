@@ -2,6 +2,8 @@ import logging
 import os
 import re
 import subprocess
+from functools import cached_property
+from typing import Set
 
 import yaml
 import processjunit
@@ -20,13 +22,13 @@ class Run:
         self._scylla_version = scylla_version
         self._scylla_install_dir = scylla_install_dir
         self._tests = tests
-        self._protocol = protocol
+        self._protocol = int(protocol)
         self._venv_path = None
         self._version_folder = None
         self._xunit_file = self._get_xunit_file(self._setup_out_dir())
         self._run()
 
-    @property
+    @cached_property
     def summary(self):
         return self._junit.summary
 
@@ -37,8 +39,8 @@ class Run:
             ' failures: {failure}, errors: {error}, skipped: {skipped},' \
             ' ignored_in_analysis: {ignored_in_analysis}'.format(**details)
 
-    @property
-    def version_folder(self):
+    @cached_property
+    def version_folder(self) -> str:
         if self._version_folder is None:
             self._version_folder = self.__version_folder(self._python_driver_type, self._tag)
         logging.info("Taking patch and ignore files from directory '{}'".format(self._version_folder))
@@ -58,7 +60,8 @@ class Run:
 
         tags_defined = sorted(
             (Version(tag) for tag in os.listdir(target_version_folder) if version_pattern.match(tag)),
-            reverse=True)
+            reverse=True
+        )
         for tag in tags_defined:
             if tag <= target_version:
                 return os.path.join(target_version_folder, str(tag))
@@ -78,28 +81,23 @@ class Run:
             os.unlink(file_path)
         return file_path
 
-    def _ignoreFile(self):
+    @cached_property
+    def ignore_file(self):
         return os.path.join(self.version_folder, 'ignore.yaml')
 
-    def _ignoreSet(self):
-        ignore_tests = []
-        ignore_file_path = self._ignoreFile()
-        if not os.path.exists(ignore_file_path):
+    def _ignore_tests(self) -> Set[str]:
+        if not os.path.exists(self.ignore_file):
             logging.info('Cannot find ignore file for version {}'.format(self._tag))
             return set()
-        with open(ignore_file_path) as f:
-            content = yaml.safe_load(f)
-            if 'tests' in content and content['tests']:
-                ignore_tests.extend(content['tests'])
-            else:
-                logging.info('No "tests" element or it is empty in ignore.yaml for version {}'.format(self._tag))
 
-            if self._protocol == '4':
-                if 'tests' in content and content['v4_tests']:
-                    ignore_tests.extend(content['v4_tests'])
-                else:
-                    logging.info('No "v4_tests" element or it is empty in ignore.yaml for version {}'.format(self._tag))
-        return set(ignore_tests)
+        with open(self.ignore_file) as file:
+            content = yaml.safe_load(file)
+        ignore_tests = set(content.get("general", []))
+        ignore_tests.update(content.get(self._protocol, []))
+        if not ignore_tests:
+            logging.info("The 'ignore.yaml' for version tag '%s' doesn't contains '%d' element or it's empty"
+                         "".format(self._tag, self._protocol))
+        return ignore_tests
 
     def _environment(self):
         result = {}
@@ -111,14 +109,16 @@ class Run:
             result['INSTALL_DIRECTORY'] = self._scylla_install_dir
         return result
 
-    def _apply_patch(self):
-        try:
-            command = "patch -p1 -i {}".format(os.path.join(self.version_folder, 'patch'))
-            subprocess.check_call(command, shell=True)
-            return True
-        except Exception as exc:
-            logging.error("Failed to apply patch to version {}, with: {}".format(self._tag, str(exc)))
-            return False
+    def _apply_patch_files(self) -> bool:
+        for file_name in os.listdir(self.version_folder):
+            if file_name == "patch" or file_name.endswith(".patch"):
+                file_path = os.path.join(self.version_folder, file_name)
+                try:
+                    subprocess.check_call(f"patch -p1 -i {file_path}", shell=True)
+                except Exception as exc:
+                    logging.error("Failed to apply patch '{}' to version '{}', with: '{}'".format(
+                        file_path, self._tag, str(exc)))
+                    return False
 
     def _get_venv_path(self):
         if self._venv_path is not None:
@@ -163,23 +163,20 @@ class Run:
         if not self._checkout_branch():
             self._publish_fake_result()
             return
-        if not self._apply_patch():
+        if not self._apply_patch_files():
             self._publish_fake_result()
             return
         if not self._install_python_requirements():
             self._publish_fake_result()
             return
-        exclude_str = ' '
-        for ignore_element in self._ignoreSet():
-            ignore_element = ignore_element.split('.')[-1]
-            exclude_str += '--exclude %s ' % ignore_element
+        exclude_str = " ".join(f'--exclude-test {test_name}' for test_name in self._ignore_tests())
         cmd = 'nosetests --with-xunit --xunit-file {} -s {} {}'.format(self._xunit_file, self._tests, exclude_str)
         logging.info(cmd)
         subprocess.call(cmd.split(), env=self._environment())
         self._junit = self._process_output()
 
     def _process_output(self):
-        junit = processjunit.ProcessJUnit(self._xunit_file, self._ignoreSet())
+        junit = processjunit.ProcessJUnit(self._xunit_file, self._ignore_tests())
         content = open(self._xunit_file).read()
         open(self._xunit_file, 'w').write(content.replace('classname="', 'classname="version_{}_v{}_'.format(
             self._tag, self._protocol)))

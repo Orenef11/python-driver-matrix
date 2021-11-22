@@ -1,0 +1,19 @@
+Index: test-requirements.txt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/test-requirements.txt b/test-requirements.txt
+--- a/test-requirements.txt	(revision c88255f202a21bbbae35f16e603b0f10f2f2cf36)
++++ b/test-requirements.txt	(date 1637498045156)
+@@ -2,8 +2,8 @@
+ scales
+ nose
+ mock>1.1
+-ccm>=2.1.2
+-unittest2
++#ccm>=2.1.2
++unittest2; python_version < '3.0.0'
+ pytz
+ sure
+ pure-sasl

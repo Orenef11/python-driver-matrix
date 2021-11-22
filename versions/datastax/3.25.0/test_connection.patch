@@ -1,0 +1,26 @@
+Index: tests/integration/standard/test_connection.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/tests/integration/standard/test_connection.py b/tests/integration/standard/test_connection.py
+--- a/tests/integration/standard/test_connection.py	
++++ b/tests/integration/standard/test_connection.py	
+@@ -180,7 +180,7 @@
+         while(retry < 300):
+             retry += 1
+             connections = self.fetch_connections(host, cluster)
+-            if len(connections) is not 0:
++            if len(connections):
+                 return connections
+             time.sleep(.1)
+         self.fail("No new connections found")
+@@ -190,7 +190,7 @@
+         while(retry < 100):
+             retry += 1
+             connections = self.fetch_connections(host, cluster)
+-            if len(connections) is 0:
++            if not len(connections):
+                 return
+             time.sleep(.5)
+         self.fail("Connections never cleared")

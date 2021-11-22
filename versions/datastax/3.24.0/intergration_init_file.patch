@@ -1,0 +1,64 @@
+Index: tests/integration/__init__.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/tests/integration/__init__.py b/tests/integration/__init__.py
+--- a/tests/integration/__init__.py	(revision 12a8adce943fe37a05ad6580e8bd302b65c2d93a)
++++ b/tests/integration/__init__.py	(date 1637498879742)
+@@ -13,6 +13,8 @@
+ # limitations under the License.
+ 
+ import os
++import warnings
++
+ from cassandra.cluster import Cluster
+ 
+ from tests import connection_class, EVENT_LOOP_MANAGER
+@@ -49,6 +51,12 @@
+ except ImportError as e:
+     CCMClusterFactory = None
+ 
++warnings.filterwarnings(
++    action="ignore",
++    category=DeprecationWarning,
++    module="cassandra.io.asyncioreactor",
++)
++
+ log = logging.getLogger(__name__)
+ 
+ CLUSTER_NAME = 'test_cluster'
+@@ -383,15 +391,15 @@
+     return CCM_CLUSTER.nodes['node%s' % node_id]
+ 
+ 
+-def use_multidc(dc_list, workloads=[]):
++def use_multidc(dc_list, workloads=None):
+     use_cluster(MULTIDC_CLUSTER_NAME, dc_list, start=True, workloads=workloads)
+ 
+ 
+-def use_singledc(start=True, workloads=[], use_single_interface=USE_SINGLE_INTERFACE):
++def use_singledc(start=True, workloads=None, use_single_interface=USE_SINGLE_INTERFACE):
+     use_cluster(CLUSTER_NAME, [3], start=start, workloads=workloads, use_single_interface=use_single_interface)
+ 
+ 
+-def use_single_node(start=True, workloads=[], configuration_options={}, dse_options={}):
++def use_single_node(start=True, workloads=None, configuration_options=None, dse_options=None):
+     use_cluster(SINGLE_NODE_CLUSTER_NAME, [1], start=start, workloads=workloads,
+                 configuration_options=configuration_options, dse_options=dse_options)
+ 
+@@ -453,10 +461,11 @@
+ 
+ 
+ def use_cluster(cluster_name, nodes, ipformat=None, start=True, workloads=None, set_keyspace=True, ccm_options=None,
+-                configuration_options={}, dse_options={}, use_single_interface=USE_SINGLE_INTERFACE):
++                configuration_options=None, dse_options=None, use_single_interface=USE_SINGLE_INTERFACE):
++    configuration_options = configuration_options or {}
++    dse_options = dse_options or {}
++    workloads = workloads or []
+     dse_cluster = True if DSE_VERSION else False
+-    if not workloads:
+-        workloads = []
+ 
+     if ccm_options is None and DSE_VERSION:
+         ccm_options = {"version": CCM_VERSION}
