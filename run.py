@@ -161,13 +161,7 @@ class Run:
 
     def _run(self):
         os.chdir(self._python_driver_git)
-        if not self._checkout_branch():
-            self._publish_fake_result()
-            return
-        if not self._apply_patch_files():
-            self._publish_fake_result()
-            return
-        if not self._install_python_requirements():
+        if not (self._checkout_branch() and self._apply_patch_files() and self._install_python_requirements()):
             self._publish_fake_result()
             return
         test_excludes = self._ignore_tests()
